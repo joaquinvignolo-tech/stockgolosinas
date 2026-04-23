@@ -48,10 +48,24 @@ function showSection(id, btn) {
   if (fn[id]) fn[id]();
 }
 
-// ── HELPERS ─────────────────────────────────────────────────────────
-const { fmt$, todayStr, fmtFecha, margen, margenCls, sha256,
-        stockTotal, lotesFIFO, proxVencimiento, diasHastaVto, estadoVencimiento,
-        retirarFIFO, agregarLote, estadoProd, getAllBarcodes, findByBarcode, notify } = window.Utils;
+// ── HELPERS (alias locales a Utils, sin crear globals) ─────────────
+var fmt$ = Utils.fmt$;
+var todayStr = Utils.todayStr;
+var fmtFecha = Utils.fmtFecha;
+var margen = Utils.margen;
+var margenCls = Utils.margenCls;
+var sha256 = Utils.sha256;
+var stockTotal = Utils.stockTotal;
+var lotesFIFO = Utils.lotesFIFO;
+var proxVencimiento = Utils.proxVencimiento;
+var diasHastaVto = Utils.diasHastaVto;
+var estadoVencimiento = Utils.estadoVencimiento;
+var retirarFIFO = Utils.retirarFIFO;
+var agregarLote = Utils.agregarLote;
+var estadoProd = Utils.estadoProd;
+var getAllBarcodes = Utils.getAllBarcodes;
+var findByBarcode = Utils.findByBarcode;
+var notify = Utils.notify;
 
 function getMarca(id) { return State.marcas.find(m => m.id === id) || null; }
 
