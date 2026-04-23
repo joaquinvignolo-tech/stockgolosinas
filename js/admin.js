@@ -107,7 +107,7 @@ function filtrarPorEstado(e) {
   showSection('productos', btn);
 }
 
-const CAT_COLORS = { 'Chocolates': '#8b4513', 'Caramelos': '#e91e63', 'Chicles': '#4caf50', 'Alfajores': '#d4a574', 'Otros': '#6b8e8e' };
+const CAT_COLORS = { 'Chocolates': '#8b4513', 'Caramelos': '#e91e63', 'Chicles': '#4caf50', 'Alfajores': '#d4a574', 'Gomitas': '#ff6b9d', 'Con juguete': '#9333ea', 'Otros': '#6b8e8e' };
 
 function renderCharts() {
   const cats = [...new Set(State.productos.map(p => p.cat))].filter(Boolean);
@@ -710,7 +710,7 @@ function recConfirmar() {
 }
 
 // ── RANKING ─────────────────────────────────────────────────────────
-const RK_COLORS = { 'Chocolates': '#8b4513', 'Caramelos': '#e91e63', 'Chicles': '#4caf50', 'Alfajores': '#d4a574', 'Otros': '#6b8e8e', 'General': '#9a7ac8' };
+const RK_COLORS = { 'Chocolates': '#8b4513', 'Caramelos': '#e91e63', 'Chicles': '#4caf50', 'Alfajores': '#d4a574', 'Gomitas': '#ff6b9d', 'Con juguete': '#9333ea', 'Otros': '#6b8e8e', 'General': '#9a7ac8' };
 function renderRanking() {
   const cEl = document.getElementById('rk-cats'), cont = document.getElementById('rk-contenido'); if (!cEl || !cont) return;
   const dias = document.getElementById('rk-periodo')?.value || 'todo';
@@ -896,13 +896,35 @@ function importarDesdeExcel(input) {
   const r = new FileReader();
   r.onload = function(e) {
     try {
-      const wb = XLSX.read(e.target.result, { type: 'array' });
+      const wb = XLSX.read(e.target.result, { type: 'array', cellDates: true });
       const ws = wb.Sheets[wb.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
       if (!rows.length) { notify('Archivo vacío.'); return; }
       const col = (row, ...keys) => { for (const k of keys) for (const rk of Object.keys(row)) if (rk.trim().toLowerCase() === k.toLowerCase()) return row[rk]; return ''; };
+
+      // Convierte fecha en formato DD/MM/YYYY o Date object → YYYY-MM-DD
+      const parseFechaImport = (val) => {
+        if (!val) return null;
+        if (val instanceof Date) {
+          const y = val.getFullYear(), m = String(val.getMonth()+1).padStart(2,'0'), d = String(val.getDate()).padStart(2,'0');
+          return y + '-' + m + '-' + d;
+        }
+        const s = String(val).trim();
+        if (!s) return null;
+        // DD/MM/YYYY o D/M/YYYY
+        const parts = s.split(/[\/\-]/);
+        if (parts.length === 3) {
+          let [d, m, y] = parts;
+          if (y.length === 2) y = '20' + y;
+          if (parseInt(d) > 31 || parseInt(m) > 12 || isNaN(parseInt(y))) return null;
+          return y + '-' + m.padStart(2,'0') + '-' + d.padStart(2,'0');
+        }
+        return null;
+      };
+
       const mm = {}; State.marcas.forEach(m => mm[m.nombre.toUpperCase()] = m.id);
-      const nuevos = []; let maxId = Math.max(0, ...State.productos.map(p => p.id));
+      const nuevos = []; let actualizados = 0; let lotesAgregados = 0;
+      let maxId = Math.max(0, ...State.productos.map(p => p.id));
       rows.forEach(row => {
         const nombre = String(col(row, 'Producto', 'Nombre') || '').trim(); if (!nombre) return;
         const mn = String(col(row, 'Marca') || '').trim().toUpperCase();
@@ -911,31 +933,44 @@ function importarDesdeExcel(input) {
         const barcode = String(col(row, 'Código', 'Codigo') || '').trim();
         const ex = barcode ? State.productos.find(p => p.barcode === barcode) : State.productos.find(p => p.nombre.toUpperCase() === nombre.toUpperCase());
         const stockImportado = parseInt(col(row, 'Stock', 'Cantidad')) || 0;
+        const vtoImportado = parseFechaImport(col(row, 'Vencimiento', 'Vto', 'Fecha'));
+        const notasImport = String(col(row, 'Notas', 'Nota') || '').trim();
         const datos = {
           barcode, nombre,
           cat: String(col(row, 'Categoría', 'Categoria') || 'Chocolates').trim(),
           marcaId,
           variedad: String(col(row, 'Variedad') || '').trim(),
-          presentacion: String(col(row, 'Presentación', 'Presentacion') || '').trim(),
-          min: parseInt(col(row, 'Mínimo', 'Minimo')) || 0,
+          presentacion: String(col(row, 'Presentación', 'Presentacion') || '').trim() || 'Unidad',
+          min: parseInt(col(row, 'Mínimo', 'Minimo')) || 5,
           costo: parseFloat(col(row, 'Costo', 'Precio costo')) || 0,
           venta: parseFloat(col(row, 'Venta', 'Precio venta')) || 0,
           ubic: String(col(row, 'Ubicación') || '').trim(),
+          notas: notasImport || null,
           provId: null
         };
         if (ex) {
           Object.assign(ex, datos);
+          // Si trae stock + vencimiento, AGREGA un nuevo lote (no pisa los existentes)
+          if (stockImportado > 0 && vtoImportado) {
+            agregarLote(ex, stockImportado, vtoImportado);
+            lotesAgregados++;
+          }
+          actualizados++;
         } else {
           maxId++;
           const nuevoProd = { id: maxId, ...datos, stock: 0, lotes: [] };
-          if (stockImportado > 0) agregarLote(nuevoProd, stockImportado, null);
+          if (stockImportado > 0) {
+            agregarLote(nuevoProd, stockImportado, vtoImportado);
+            if (vtoImportado) lotesAgregados++;
+          }
           nuevos.push(nuevoProd);
         }
       });
       State.productos.push(...nuevos);
       State.nextProdId = Math.max(State.nextProdId, maxId + 1);
       renderDashboard(); renderTabla(); renderMarcas(); renderSelectMarca(); renderFiltroMarca(); renderSelectProv(); renderAlertas(); renderReporte();
-      notify(nuevos.length ? `Importado: ${rows.length - nuevos.length} actualizados, ${nuevos.length} nuevos.` : `Importado: ${rows.length} actualizados.`);
+      const msgVto = lotesAgregados > 0 ? ` (${lotesAgregados} con vencimiento)` : '';
+      notify(`Importado: ${actualizados} actualizados, ${nuevos.length} nuevos${msgVto}.`);
       App.guardarEnFirestore();
     } catch (err) {
       notify('Error al leer el Excel.');
