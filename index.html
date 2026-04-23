@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#be185d">
+<link rel="manifest" href="manifest.json">
+<title>StockGolosinas</title>
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════
+     LOGIN
+═══════════════════════════════════════════ -->
+<div class="login-overlay" id="loginOverlay">
+  <div class="login-wrap">
+    <div class="login-logo">🍬 STOCK<span>GOLOSINAS</span></div>
+    <div class="login-sub">Inventario del kiosco</div>
+
+    <div class="login-modes">
+      <button class="login-mode-btn selected" id="mode-admin-btn" onclick="selectLoginMode('admin')">
+        <span class="mode-icon">⚙️</span>ADMIN
+      </button>
+      <button class="login-mode-btn" id="mode-op-btn" onclick="selectLoginMode('operador')">
+        <span class="mode-icon">📱</span>OPERADOR
+      </button>
+    </div>
+
+    <input type="password" class="login-field" id="loginPass" placeholder="Contraseña"
+           onkeydown="if(event.key==='Enter') doLogin()" autocomplete="off">
+    <button class="login-btn" onclick="doLogin()">Ingresar</button>
+    <div class="login-error" id="loginError"></div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════
+     ADMIN UI
+═══════════════════════════════════════════ -->
+<div id="admin-ui" style="display:none">
+
+<!-- Header -->
+<div class="app-header">
+  <div style="display:flex;align-items:center;gap:10px">
+    <button class="hamburger" id="hamburger-btn" onclick="toggleSidebar()">
+      <span></span><span></span><span></span>
+    </button>
+    <div class="app-logo">🍬 STOCK<span class="logo-accent">GOLOSINAS</span></div>
+  </div>
+  <div class="header-btns">
+    <span id="sync-status" style="font-size:11px;color:var(--text3)"></span>
+    <button class="btn btn-sm" onclick="App.guardarEnFirestore()">💾 Guardar</button>
+    <button class="btn btn-sm btn-accent" onclick="Admin.exportarExcel()">⬇ Excel</button>
+    <button class="btn btn-sm" onclick="cerrarSesion()">Salir</button>
+  </div>
+</div>
+
+<div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
+
+<div class="app-main">
+  <!-- Sidebar -->
+  <aside class="sidebar" id="sidebar">
+    <div class="nav-section">General</div>
+    <button class="nav-item active" onclick="Admin.showSection('dashboard',this)"><span class="nav-icon">📊</span>Dashboard</button>
+    <button class="nav-item" onclick="Admin.showSection('productos',this)"><span class="nav-icon">📦</span>Productos</button>
+    <button class="nav-item" onclick="Admin.showSection('marcas',this)"><span class="nav-icon">🏷️</span>Marcas</button>
+    <button class="nav-item" onclick="Admin.showSection('proveedores',this)"><span class="nav-icon">🚚</span>Proveedores</button>
+
+    <div class="nav-section">Control</div>
+    <button class="nav-item" onclick="Admin.showSection('alertas',this)"><span class="nav-icon">⚠️</span>Alertas</button>
+    <button class="nav-item" onclick="Admin.showSection('vencimientos',this)"><span class="nav-icon">📅</span>Vencimientos<span id="nav-badge-vencimientos" class="nav-badge" style="display:none">0</span></button>
+    <button class="nav-item" onclick="Admin.showSection('reporte',this)"><span class="nav-icon">📈</span>Reporte</button>
+    <button class="nav-item" onclick="Admin.showSection('precios',this)"><span class="nav-icon">💲</span>Historial precios</button>
+
+    <div class="nav-section">Operaciones</div>
+    <button class="nav-item" onclick="Admin.showSection('retiro',this)"><span class="nav-icon">📤</span>Retiro en lote</button>
+    <button class="nav-item" onclick="Admin.showSection('recepcion',this)"><span class="nav-icon">📥</span>Recepción</button>
+    <button class="nav-item" onclick="Admin.showSection('ranking',this)"><span class="nav-icon">🏆</span>Ranking</button>
+
+    <div class="nav-section">Sistema</div>
+    <button class="nav-item" onclick="Admin.showSection('configuracion',this)"><span class="nav-icon">⚙️</span>Configuración</button>
+  </aside>
+
+  <!-- Contenido -->
+  <main class="content">
+
+    <!-- ────────── DASHBOARD ────────── -->
+    <section class="section active" id="sec-dashboard">
+      <div class="stats-row" id="stats-row"></div>
+      <div class="dash-grid-2">
+        <div class="card">
+          <div class="card-header"><div class="card-title">📊 Valor por categoría</div></div>
+          <div style="position:relative;height:280px"><canvas id="chart-categorias"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><div class="card-title">🏷️ Stock por marca (top 10)</div></div>
+          <div style="position:relative;height:280px"><canvas id="chart-marcas"></canvas></div>
+        </div>
+      </div>
+      <div class="dash-grid-2">
+        <div class="card">
+          <div class="card-header"><div class="card-title">Alertas recientes</div></div>
+          <div id="dash-alertas"></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><div class="card-title">Últimos movimientos <button id="btn-migrar" class="btn btn-sm" style="margin-left:8px;display:none" onclick="Admin.migrarLotes()">🔄 Agrupar viejos</button></div></div>
+          <div id="dash-movs"></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header"><div class="card-title">Resumen por marca</div></div>
+        <div class="marca-grid" id="dash-marcas"></div>
+      </div>
+    </section>
+
+    <!-- ────────── PRODUCTOS ────────── -->
+    <section class="section" id="sec-productos">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title" id="card-title-prod">Agregar / Editar producto</div>
+          <div class="btn-row">
+            <input type="file" id="excel-input" accept=".xlsx,.xls" style="display:none" onchange="Admin.importarDesdeExcel(this)">
+            <button class="btn btn-sm" onclick="document.getElementById('excel-input').click()">⬆ Importar Excel</button>
+          </div>
+        </div>
+
+        <!-- Datos del producto -->
+        <div class="form-grid fg3" style="margin-bottom:12px">
+          <div class="field"><label>Código de barras</label><input type="text" id="p-barcode" placeholder="Escaneá o escribí…" oninput="Admin.onBarcodeInput(this.value)"></div>
+          <div class="field"><label>Nombre</label><input type="text" id="p-nombre" placeholder="Ej: Bon o Bon Clásico"></div>
+          <div class="field"><label>Categoría</label><select id="p-cat">
+            <option>Chocolates</option><option>Caramelos</option><option>Chicles</option><option>Alfajores</option><option>Otros</option>
+          </select></div>
+        </div>
+
+        <div class="form-grid fg4" style="margin-bottom:12px">
+          <div class="field"><label>Marca</label><select id="p-marca"></select></div>
+          <div class="field"><label>Variedad</label><input type="text" id="p-variedad" placeholder="Ej: Caja x16"></div>
+          <div class="field"><label>Presentación</label><select id="p-presentacion">
+            <option>Unidad</option><option>Pack</option><option>Caja</option><option>Bolsa</option><option>Display</option><option>Pack x6</option><option>Pack x12</option><option>Pack x24</option>
+          </select></div>
+          <div class="field"><label>Stock mínimo</label><input type="number" id="p-min" placeholder="5" min="0"></div>
+        </div>
+
+        <div class="form-grid fg4" style="margin-bottom:12px">
+          <div class="field">
+            <label>Precio costo</label>
+            <input type="number" id="p-costo" placeholder="$" min="0">
+            <div id="p-costo-prev" style="font-size:10px;color:var(--text3)"></div>
+          </div>
+          <div class="field">
+            <label>Precio venta</label>
+            <input type="number" id="p-venta" placeholder="$" min="0">
+            <div id="p-venta-prev" style="font-size:10px;color:var(--text3)"></div>
+          </div>
+          <div class="field"><label>Ubicación</label><input type="text" id="p-ubic" placeholder="Góndola 2, estante A"></div>
+          <div class="field"><label>Proveedor</label><select id="p-prov"></select></div>
+        </div>
+
+        <div class="form-grid fg2" style="margin-bottom:12px">
+          <div class="field">
+            <label>Códigos de barras adicionales</label>
+            <input type="text" id="p-barcodes-extra" placeholder="Separados por coma: 7791234, 7795678">
+            <div style="font-size:10px;color:var(--text3)">Para productos con múltiples presentaciones del mismo ítem.</div>
+          </div>
+          <div class="field"><label>Notas</label><input type="text" id="p-notas" placeholder="Opcional"></div>
+        </div>
+
+        <!-- Stock inicial (solo para productos nuevos) -->
+        <div class="form-grid fg2" style="margin-bottom:12px">
+          <div class="field">
+            <label>Stock inicial (solo productos nuevos)</label>
+            <input type="number" id="p-stock-inicial" placeholder="0" min="0">
+            <div style="font-size:10px;color:var(--text3)">Crea un primer lote. Para productos existentes usá la sección de Lotes abajo.</div>
+          </div>
+          <div class="field">
+            <label>Vencimiento del stock inicial</label>
+            <input type="date" id="p-vto-inicial">
+            <div style="font-size:10px;color:var(--text3)">Opcional.</div>
+          </div>
+        </div>
+
+        <div class="btn-row" style="margin-top:8px">
+          <button class="btn btn-accent" id="btn-guardar" onclick="Admin.guardarProducto()">+ Agregar</button>
+          <button class="btn" id="btn-cancelar" onclick="Admin.limpiarForm()" style="display:none">Cancelar</button>
+        </div>
+
+        <!-- Lotes (aparece al editar un producto) -->
+        <div id="lotes-form-wrap" style="display:none;margin-top:20px;padding-top:20px;border-top:1px solid var(--border)">
+          <div class="card-title" style="margin-bottom:10px">📅 Lotes y vencimientos</div>
+          <div style="font-size:12px;color:var(--text3);margin-bottom:12px">Los retiros descuentan del lote que vence primero (FIFO).</div>
+          <div class="lote-list" id="lotes-list"></div>
+          <div class="lote-add-row">
+            <div class="field"><label>Cantidad</label><input type="number" id="lote-cant" placeholder="0" min="1"></div>
+            <div class="field"><label>Vencimiento</label><input type="date" id="lote-vto"></div>
+            <div></div>
+            <button class="btn btn-accent btn-sm" onclick="Admin.agregarLoteAlForm()">+ Agregar lote</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Lista de productos</div>
+        </div>
+        <div class="filter-row">
+          <input type="text" id="buscar-prod" placeholder="🔍 Buscar..." oninput="Admin.renderTabla()">
+          <select id="fil-cat" onchange="Admin.renderTabla()">
+            <option value="">Todas las categorías</option>
+            <option>Chocolates</option><option>Caramelos</option><option>Chicles</option><option>Alfajores</option><option>Otros</option>
+          </select>
+          <select id="fil-marca" onchange="Admin.renderTabla()"></select>
+          <select id="fil-estado" onchange="Admin.renderTabla()">
+            <option value="">Todos los estados</option>
+            <option value="ok">OK</option><option value="bajo">Stock bajo</option><option value="agotado">Agotados</option>
+          </select>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th class="col-hide-mob">Código</th>
+                <th>Producto</th>
+                <th class="col-hide-mob">Cat.</th>
+                <th>Marca</th>
+                <th class="col-hide-mob">Variedad</th>
+                <th class="col-hide-mob">Present.</th>
+                <th>Stock</th>
+                <th class="col-hide-mob">Vto</th>
+                <th class="col-hide-mob">Costo</th>
+                <th class="col-hide-mob">Venta</th>
+                <th class="col-hide-mob">Margen</th>
+                <th>Estado</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="tabla-productos"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ────────── MARCAS ────────── -->
+    <section class="section" id="sec-marcas">
+      <div class="card">
+        <div class="card-title" style="margin-bottom:12px">Agregar marca</div>
+        <div class="form-grid fg3">
+          <div class="field"><label>Nombre</label><input type="text" id="mr-nombre" placeholder="Ej: MILKA"></div>
+          <div class="field"><label>Categoría principal</label><select id="mr-cat">
+            <option>General</option><option>Chocolates</option><option>Caramelos</option><option>Chicles</option><option>Alfajores</option>
+          </select></div>
+          <div style="display:flex;align-items:end"><button class="btn btn-accent" onclick="Admin.agregarMarca()">+ Agregar</button></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title" style="margin-bottom:12px">Lista de marcas</div>
+        <div id="lista-marcas"></div>
+      </div>
+    </section>
+
+    <!-- ────────── PROVEEDORES ────────── -->
+    <section class="section" id="sec-proveedores">
+      <div class="card">
+        <div class="card-title" style="margin-bottom:12px">Agregar proveedor</div>
+        <div class="form-grid fg3">
+          <div class="field"><label>Nombre</label><input type="text" id="pv-nombre" placeholder="Ej: Distribuidora X"></div>
+          <div class="field"><label>Contacto</label><input type="text" id="pv-contacto"></div>
+          <div class="field"><label>Teléfono</label><input type="text" id="pv-tel"></div>
+          <div class="field"><label>Email</label><input type="text" id="pv-email"></div>
+          <div class="field"><label>Día reposición</label><select id="pv-dia">
+            <option value="">—</option><option>Lunes</option><option>Martes</option><option>Miércoles</option><option>Jueves</option><option>Viernes</option><option>Sábado</option>
+          </select></div>
+          <div style="display:flex;align-items:end"><button class="btn btn-accent" onclick="Admin.agregarProveedor()">+ Agregar</button></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title" style="margin-bottom:12px">Lista de proveedores</div>
+        <div id="lista-proveedores"></div>
+      </div>
+    </section>
+
+    <!-- ────────── ALERTAS ────────── -->
+    <section class="section" id="sec-alertas">
+      <div class="card">
+        <div class="card-title" style="margin-bottom:12px">Productos que requieren atención</div>
+        <div id="alertas-lista"></div>
+      </div>
+    </section>
+
+    <!-- ────────── VENCIMIENTOS (renderizado dinámicamente) ────────── -->
+    <section class="section" id="sec-vencimientos"></section>
+
+    <!-- ────────── REPORTE ────────── -->
+    <section class="section" id="sec-reporte">
+      <div class="stats-row" id="rep-stats" style="grid-template-columns:repeat(3,1fr)"></div>
+      <div class="card">
+        <div class="card-title" style="margin-bottom:12px">Valor por categoría</div>
+        <div id="rep-cats"></div>
+      </div>
+      <div class="card">
+        <div class="card-title" style="margin-bottom:12px">Valor por marca</div>
+        <div id="rep-marcas"></div>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Inventario completo</div>
+          <button class="btn btn-sm btn-accent" onclick="Admin.exportarExcel()">⬇ Excel</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th class="col-hide-mob">Código</th>
+                <th>Producto</th>
+                <th class="col-hide-mob">Cat.</th>
+                <th>Marca</th>
+                <th class="col-hide-mob">Variedad</th>
+                <th class="col-hide-mob">Present.</th>
+                <th>Stock</th>
+                <th class="col-hide-mob">Costo</th>
+                <th class="col-hide-mob">Venta</th>
+                <th class="col-hide-mob">Margen</th>
+                <th>Valor</th>
+              </tr>
+            </thead>
+            <tbody id="tabla-reporte"></tbody>
+            <tfoot id="tfoot-reporte"></tfoot>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ────────── HISTORIAL PRECIOS ────────── -->
+    <section class="section" id="sec-precios">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">Historial de cambios de precios</div>
+          <input type="text" id="buscar-precios" placeholder="🔍 Buscar producto..." oninput="Admin.renderHistorialPrecios()" style="width:auto;font-size:12px">
+        </div>
+        <div id="historial-precios-container"></div>
+      </div>
+    </section>
+
+    <!-- ────────── RETIRO EN LOTE ────────── -->
+    <section class="section" id="sec-retiro">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">📤 Retiro en lote</div>
+          <span id="ret-badge" class="badge badge-cat">vacío</span>
+        </div>
+        <div style="display:grid;grid-template-columns:2fr 80px 130px;gap:10px;margin-bottom:12px;position:relative">
+          <div class="field" style="position:relative">
+            <label>Producto</label>
+            <input type="text" id="ret-buscar" placeholder="Buscar…" oninput="Admin.retBuscar(this.value)" autocomplete="off">
+            <div id="ret-sug" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--surface);border:1px solid var(--border2);border-radius:8px;margin-top:2px;max-height:300px;overflow-y:auto;z-index:100;box-shadow:0 8px 20px rgba(0,0,0,.08)"></div>
+          </div>
+          <div class="field"><label>Cant</label><input type="number" id="ret-cant" value="1" min="1"></div>
+          <div style="display:flex;align-items:end"><button class="btn btn-accent" onclick="Admin.retAgregar()" style="width:100%">+ Agregar</button></div>
+        </div>
+
+        <div class="form-grid fg2" style="margin-bottom:12px">
+          <div class="field"><label>Nombre del lote (opcional)</label><input type="text" id="ret-nombre" placeholder="Ej: Venta mostrador 23/4"></div>
+          <div class="field"><label>Nota</label><input type="text" id="ret-nota" placeholder="Motivo o referencia"></div>
+        </div>
+
+        <div id="ret-vacio" style="text-align:center;padding:40px 20px;color:var(--text3);font-size:13px">Agregá productos arriba para armar el retiro.</div>
+
+        <div id="ret-tabla-wrap" style="display:none">
+          <div class="table-wrap" style="margin-bottom:12px">
+            <table>
+              <thead><tr><th>Producto</th><th style="text-align:right">Stock actual</th><th style="text-align:right">Retirar</th><th style="text-align:right">Stock final</th><th></th></tr></thead>
+              <tbody id="ret-tbody"></tbody>
+            </table>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+            <div style="font-size:13px;color:var(--text2)">Total a retirar: <b id="ret-total" style="color:var(--accent);font-size:16px">0</b> unidades</div>
+            <div class="btn-row">
+              <button class="btn" onclick="Admin.retLimpiar()">Limpiar</button>
+              <button class="btn btn-accent" onclick="Admin.retConfirmar()">✓ Confirmar retiro</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ────────── RECEPCIÓN ────────── -->
+    <section class="section" id="sec-recepcion">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">📥 Recepción de mercadería</div>
+          <span id="rec-badge" class="badge badge-cat">vacío</span>
+        </div>
+        <div style="display:grid;grid-template-columns:2fr 80px 150px 130px;gap:10px;margin-bottom:12px;position:relative">
+          <div class="field" style="position:relative">
+            <label>Producto</label>
+            <input type="text" id="rec-buscar" placeholder="Buscar…" oninput="Admin.recBuscar(this.value)" autocomplete="off">
+            <div id="rec-sug" style="display:none;position:absolute;top:100%;left:0;right:0;background:var(--surface);border:1px solid var(--border2);border-radius:8px;margin-top:2px;max-height:300px;overflow-y:auto;z-index:100;box-shadow:0 8px 20px rgba(0,0,0,.08)"></div>
+          </div>
+          <div class="field"><label>Cant</label><input type="number" id="rec-cant" value="1" min="1"></div>
+          <div class="field"><label>Vencimiento</label><input type="date" id="rec-vto"></div>
+          <div style="display:flex;align-items:end"><button class="btn btn-accent" onclick="Admin.recAgregar()" style="width:100%">+ Agregar</button></div>
+        </div>
+
+        <div class="form-grid fg2" style="margin-bottom:12px">
+          <div class="field"><label>Nombre del lote (opcional)</label><input type="text" id="rec-nombre" placeholder="Ej: Pedido Arcor 23/4"></div>
+          <div class="field"><label>Proveedor</label><select id="rec-prov"></select></div>
+        </div>
+
+        <div id="rec-vacio" style="text-align:center;padding:40px 20px;color:var(--text3);font-size:13px">Agregá productos arriba para armar la recepción.</div>
+
+        <div id="rec-tabla-wrap" style="display:none">
+          <div class="table-wrap" style="margin-bottom:12px">
+            <table>
+              <thead><tr><th>Producto</th><th style="text-align:right">Stock actual</th><th style="text-align:right">Ingreso</th><th style="text-align:center">Vto</th><th style="text-align:right">Stock final</th><th></th></tr></thead>
+              <tbody id="rec-tbody"></tbody>
+            </table>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+            <div style="font-size:13px;color:var(--text2)">Total a ingresar: <b id="rec-total" style="color:var(--green);font-size:16px">0</b> unidades</div>
+            <div class="btn-row">
+              <button class="btn" onclick="Admin.recLimpiar()">Limpiar</button>
+              <button class="btn btn-accent" onclick="Admin.recConfirmar()">✓ Confirmar recepción</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ────────── RANKING ────────── -->
+    <section class="section" id="sec-ranking">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">🏆 Ranking de más retirados</div>
+          <select id="rk-periodo" onchange="Admin.renderRanking()" style="width:auto;font-size:12px">
+            <option value="todo">Todo el tiempo</option>
+            <option value="7">Últimos 7 días</option>
+            <option value="30">Últimos 30 días</option>
+            <option value="90">Últimos 90 días</option>
+          </select>
+        </div>
+        <div id="rk-cats" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px"></div>
+        <div id="rk-contenido"></div>
+      </div>
+    </section>
+
+    <!-- ────────── CONFIGURACIÓN (renderizado dinámicamente) ────────── -->
+    <section class="section" id="sec-configuracion"></section>
+
+  </main>
+</div>
+
+<!-- Bottom nav mobile -->
+<nav class="bottom-nav">
+  <div class="bottom-nav-inner">
+    <button class="bnav-item active" onclick="Admin.showSectionMobile('dashboard',this)"><span class="bnav-icon">📊</span>Home</button>
+    <button class="bnav-item" onclick="Admin.showSectionMobile('productos',this)"><span class="bnav-icon">📦</span>Prod.</button>
+    <button class="bnav-item" onclick="Admin.showSectionMobile('alertas',this)"><span class="bnav-icon">⚠️</span>Alert.</button>
+    <button class="bnav-item" onclick="Admin.showSectionMobile('vencimientos',this)"><span class="bnav-icon">📅</span>Vto.</button>
+    <button class="bnav-item" onclick="Admin.showSectionMobile('ranking',this)"><span class="bnav-icon">🏆</span>Rank.</button>
+  </div>
+</nav>
+
+<div id="notif"></div>
+
+</div><!-- /admin-ui -->
+
+<!-- ═══════════════════════════════════════════
+     MODO OPERADOR
+═══════════════════════════════════════════ -->
+<div id="modo-operador">
+  <header class="op-header">
+    <div class="op-header-logo">🍬 STOCK<span style="color:var(--accent)">GOLOSINAS</span> <span class="op-badge">Operador</span></div>
+    <button class="op-exit-btn" onclick="cerrarSesion()">Salir</button>
+  </header>
+
+  <main class="op-body">
+    <!-- ESTADO: IDLE (esperando escaneo) -->
+    <div class="op-idle" id="op-idle">
+      <div class="op-scan-circle" onclick="iniciarEscanerBarras()">
+        <div style="font-size:64px">📷</div>
+        <div class="op-scan-label">Escanear<br>código</div>
+      </div>
+      <div class="op-methods">
+        <button class="op-method-btn" onclick="iniciarFotoIA()">
+          <span style="font-size:24px">🤖</span>Foto + IA
+        </button>
+      </div>
+      <div class="op-search-area" style="margin-top:8px">
+        <div class="op-search-wrap">
+          <input type="text" class="op-search-input" id="op-busqueda-manual" placeholder="🔍 Buscar manualmente..." oninput="opBuscarManual(this.value)" autocomplete="off">
+          <div class="op-sug-dropdown" id="op-sug-manual"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ESTADO: CÁMARA (escaneando) -->
+    <div class="op-state" id="op-state-camara">
+      <div class="op-video-container">
+        <video id="op-video" autoplay playsinline muted></video>
+        <div class="op-scan-line"></div>
+        <div class="op-corner tl"></div><div class="op-corner tr"></div>
+        <div class="op-corner bl"></div><div class="op-corner br"></div>
+      </div>
+      <div class="op-camera-hint">Apuntá el código al recuadro</div>
+      <div class="op-manual-input">
+        <input type="text" id="op-barcode-manual" placeholder="O escribí el código..." onkeydown="if(event.key==='Enter') opBuscarPorCodigo(this.value)">
+        <button onclick="opBuscarPorCodigo(document.getElementById('op-barcode-manual').value)">OK</button>
+      </div>
+      <button class="op-close-btn" onclick="cerrarCamara()">✕ Cancelar</button>
+    </div>
+
+    <!-- ESTADO: FOTO IA -->
+    <div class="op-state" id="op-state-foto">
+      <div class="op-photo-preview" id="op-photo-preview"><span style="font-size:48px">📸</span></div>
+      <input type="file" id="op-photo-input" accept="image/*" capture="environment" onchange="opAnalizarFoto(this)">
+      <button class="op-photo-btn" onclick="document.getElementById('op-photo-input').click()">📸 Tomar foto del producto</button>
+      <div id="op-photo-status"></div>
+      <div id="op-ai-matches"></div>
+      <button class="op-close-btn" onclick="cerrarFotoIA()">✕ Cancelar</button>
+    </div>
+
+    <!-- ESTADO: PRODUCTO (mostrar y operar) -->
+    <div class="op-state" id="op-state-producto">
+      <div class="op-prod-card" id="op-prod-card"></div>
+
+      <!-- Selector de modo -->
+      <div class="op-mode-tabs">
+        <button class="op-tab retiro active" id="op-tab-ret" onclick="opSeleccionarModo('retiro')">
+          <span class="tab-icon">📤</span>Retirar
+        </button>
+        <button class="op-tab recepcion" id="op-tab-rec" onclick="opSeleccionarModo('recepcion')">
+          <span class="tab-icon">📥</span>Recibir
+        </button>
+      </div>
+
+      <!-- Cantidad -->
+      <div class="op-qty-card">
+        <div class="op-qty-meta">
+          <div class="op-qty-label">Cantidad</div>
+          <div class="op-qty-presets">
+            <button class="op-qty-preset" onclick="opSetQty(1)">1</button>
+            <button class="op-qty-preset" onclick="opSetQty(5)">5</button>
+            <button class="op-qty-preset" onclick="opSetQty(10)">10</button>
+            <button class="op-qty-preset" onclick="opSetQty(24)">24</button>
+          </div>
+        </div>
+        <div class="op-qty-controls">
+          <button class="op-qty-btn minus" onclick="opCambiarQty(-1)">−</button>
+          <input type="number" id="op-qty-display" class="op-qty-num" value="1" min="1" style="border:none;background:transparent;width:70px" oninput="opQtyManual(this.value)">
+          <button class="op-qty-btn plus" onclick="opCambiarQty(1)">+</button>
+        </div>
+      </div>
+
+      <!-- Vencimiento (solo en modo recepción) -->
+      <div id="op-vto-wrap" style="display:none">
+        <div class="op-recepcion-lote">
+          <label>📅 Vencimiento de este lote (opcional)</label>
+          <input type="date" id="op-vto-input" style="background:white">
+        </div>
+      </div>
+
+      <textarea class="op-nota" id="op-nota" rows="2" placeholder="Nota (opcional)..."></textarea>
+
+      <button class="op-confirm-btn retiro" id="op-confirm-btn" onclick="opConfirmar()">
+        <span id="op-confirm-icon">📤</span>
+        <span id="op-confirm-label">Confirmar retiro</span>
+      </button>
+
+      <button class="op-rescan-btn" onclick="opNuevoEscaneo()">📷 Escanear otro</button>
+
+      <!-- Historial -->
+      <div class="op-history-card" id="op-history-wrap" style="display:none">
+        <div class="op-hist-title">Últimos movimientos</div>
+        <div id="op-hist-rows"></div>
+      </div>
+    </div>
+  </main>
+
+  <div id="op-toast"></div>
+</div><!-- /modo-operador -->
+
+<!-- ═══════════════════════════════════════════
+     SCRIPTS
+═══════════════════════════════════════════ -->
+<!-- Librerías externas -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+<!-- Firebase (módulo ES6, carga primero) -->
+<script type="module" src="js/firebase.js"></script>
+
+<!-- Módulos propios (clásicos, orden importa) -->
+<script src="js/utils.js"></script>
+<script src="js/app.js"></script>
+<script src="js/admin.js"></script>
+<script src="js/operador.js"></script>
+
+</body>
+</html>
