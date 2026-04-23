@@ -132,7 +132,7 @@
           <div class="field"><label>Código de barras</label><input type="text" id="p-barcode" placeholder="Escaneá o escribí…" oninput="Admin.onBarcodeInput(this.value)"></div>
           <div class="field"><label>Nombre</label><input type="text" id="p-nombre" placeholder="Ej: Bon o Bon Clásico"></div>
           <div class="field"><label>Categoría</label><select id="p-cat">
-            <option>Chocolates</option><option>Caramelos</option><option>Chicles</option><option>Alfajores</option><option>Otros</option>
+            <option>Chocolates</option><option>Caramelos</option><option>Chicles</option><option>Alfajores</option><option>Gomitas</option><option>Con juguete</option><option>Otros</option>
           </select></div>
         </div>
 
@@ -210,7 +210,7 @@
           <input type="text" id="buscar-prod" placeholder="🔍 Buscar..." oninput="Admin.renderTabla()">
           <select id="fil-cat" onchange="Admin.renderTabla()">
             <option value="">Todas las categorías</option>
-            <option>Chocolates</option><option>Caramelos</option><option>Chicles</option><option>Alfajores</option><option>Otros</option>
+            <option>Chocolates</option><option>Caramelos</option><option>Chicles</option><option>Alfajores</option><option>Gomitas</option><option>Con juguete</option><option>Otros</option>
           </select>
           <select id="fil-marca" onchange="Admin.renderTabla()"></select>
           <select id="fil-estado" onchange="Admin.renderTabla()">
@@ -250,7 +250,7 @@
         <div class="form-grid fg3">
           <div class="field"><label>Nombre</label><input type="text" id="mr-nombre" placeholder="Ej: MILKA"></div>
           <div class="field"><label>Categoría principal</label><select id="mr-cat">
-            <option>General</option><option>Chocolates</option><option>Caramelos</option><option>Chicles</option><option>Alfajores</option>
+            <option>General</option><option>Chocolates</option><option>Caramelos</option><option>Chicles</option><option>Alfajores</option><option>Gomitas</option><option>Con juguete</option><option>Otros</option>
           </select></div>
           <div style="display:flex;align-items:end"><button class="btn btn-accent" onclick="Admin.agregarMarca()">+ Agregar</button></div>
         </div>
