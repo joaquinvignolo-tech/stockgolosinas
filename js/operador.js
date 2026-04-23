@@ -2,9 +2,19 @@
 // Operador — Escáner, Foto+IA, Retiros FIFO, Recepciones con vto
 // ═══════════════════════════════════════════════════════════════════
 
-const { stockTotal, lotesFIFO, proxVencimiento, diasHastaVto, estadoVencimiento,
-        retirarFIFO, agregarLote, estadoProd, getAllBarcodes, findByBarcode,
-        fmtFecha, todayStr, notify } = window.Utils;
+var stockTotal = Utils.stockTotal;
+var lotesFIFO = Utils.lotesFIFO;
+var proxVencimiento = Utils.proxVencimiento;
+var diasHastaVto = Utils.diasHastaVto;
+var estadoVencimiento = Utils.estadoVencimiento;
+var retirarFIFO = Utils.retirarFIFO;
+var agregarLote = Utils.agregarLote;
+var estadoProd = Utils.estadoProd;
+var getAllBarcodes = Utils.getAllBarcodes;
+var findByBarcode = Utils.findByBarcode;
+var fmtFecha = Utils.fmtFecha;
+var todayStr = Utils.todayStr;
+var notify = Utils.notify;
 
 function getMarca(id) { return State.marcas.find(m => m.id === id) || null; }
 
