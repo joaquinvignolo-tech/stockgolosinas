@@ -14,16 +14,37 @@ window.State = {
   nextProvId: 1,
   editingId: null,
   loginMode: 'admin',
-  authHashes: null,  // { admin: "hash...", operador: "hash..." }
+  currentUser: null,   // 'joaquin', 'natalia', 'deposito'
+  currentRol: null,    // 'admin', 'encargado', 'operador'
+  authUsers: null,     // { joaquin: {rol, hash}, natalia: {...}, ... }
+  authHashes: null,    // legacy { admin: "hash...", operador: "hash..." }
   syncBusy: false,
   chartCat: null,
   chartMar: null
 };
 
-// Contraseñas por defecto (primer login, antes de cambiar)
+// Contraseñas por defecto (primer login, antes de cambiar).
+// Cada usuario tiene SU propia contraseña, y un rol asociado.
+//   joaquin → admin (control total)
+//   natalia → encargado (todo menos config y borrar productos)
+//   deposito → operador (modo kiosco escaneo/movimientos)
+const DEFAULT_USERS = {
+  'joaquin':  { rol: 'admin',     pass: 'estaderojo1' },
+  'natalia':  { rol: 'encargado', pass: '1317' },
+  'deposito': { rol: 'operador',  pass: 'golosinas' }
+};
+
+// Define qué puede hacer cada rol
+const ROLES = {
+  admin:     { puedeBorrar: true,  vePrecios: true, veConfig: true,  ui: 'admin' },
+  encargado: { puedeBorrar: false, vePrecios: true, veConfig: false, ui: 'admin' },
+  operador:  { puedeBorrar: false, vePrecios: true, veConfig: false, ui: 'operador' }
+};
+
+// LEGACY: por compatibilidad con código viejo
 const DEFAULT_PASSWORDS = {
-  admin: 'golosinas2024',
-  operador: 'operador2024'
+  admin: 'estaderojo1',
+  operador: 'golosinas'
 };
 
 // Marcas pre-cargadas (se usan si Firestore está vacío la primera vez)
@@ -50,48 +71,60 @@ const MARCAS_INICIALES = [
 ];
 
 // ── LOGIN ───────────────────────────────────────────────────────────
-function selectLoginMode(m) {
-  State.loginMode = m;
-  document.getElementById('mode-admin-btn').classList.toggle('selected', m === 'admin');
-  document.getElementById('mode-op-btn').classList.toggle('selected', m === 'operador');
-}
+// Mantengo la función para no romper código viejo, pero ya no hace nada visible.
+function selectLoginMode(m) { /* no-op: ahora se elige por usuario */ }
 
 async function doLogin() {
+  const userInput = (document.getElementById('loginUser').value || '').trim().toLowerCase();
   const pass = document.getElementById('loginPass').value;
   const err  = document.getElementById('loginError');
   const btn  = document.querySelector('.login-btn');
 
+  if (!userInput) { err.textContent = 'Ingresá tu usuario.'; return; }
   if (!pass) { err.textContent = 'Ingresá la contraseña.'; return; }
 
   btn.disabled = true;
   err.textContent = '';
 
   try {
-    // Esperar Firebase Auth listo
     await window._fb.ready();
 
-    // Cargar hashes desde Firestore (si existen)
+    // Cargar config desde Firestore (si existe)
     let cfg = await window._fb.getConfig();
 
-    // Primera vez: si no hay config, crear con passwords por defecto
-    if (!cfg || !cfg.auth) {
+    // Primera vez (o migración): si no hay `users`, crearlos con los defaults
+    if (!cfg || !cfg.users) {
+      const users = {};
+      for (const u in DEFAULT_USERS) {
+        const def = DEFAULT_USERS[u];
+        users[u] = { rol: def.rol, hash: await Utils.sha256(def.pass) };
+      }
       const hashAdmin = await Utils.sha256(DEFAULT_PASSWORDS.admin);
       const hashOp    = await Utils.sha256(DEFAULT_PASSWORDS.operador);
       await window._fb.setConfig({
+        users: users,
         auth: { admin: hashAdmin, operador: hashOp },
-        createdAt: new Date().toISOString()
+        createdAt: cfg && cfg.createdAt ? cfg.createdAt : new Date().toISOString()
       });
-      cfg = { auth: { admin: hashAdmin, operador: hashOp } };
+      cfg = { users: users, auth: { admin: hashAdmin, operador: hashOp } };
     }
 
-    State.authHashes = cfg.auth;
+    State.authUsers = cfg.users || {};
+    State.authHashes = cfg.auth || {};
 
-    // Validar password ingresada contra hash almacenado
+    // Buscar el usuario
+    const userRecord = State.authUsers[userInput];
+    if (!userRecord) {
+      err.textContent = 'Usuario o contraseña incorrectos.';
+      document.getElementById('loginPass').value = '';
+      btn.disabled = false;
+      return;
+    }
+
+    // Validar password
     const hashIngresado = await Utils.sha256(pass);
-    const hashEsperado  = State.authHashes[State.loginMode];
-
-    if (hashIngresado !== hashEsperado) {
-      err.textContent = 'Contraseña incorrecta.';
+    if (hashIngresado !== userRecord.hash) {
+      err.textContent = 'Usuario o contraseña incorrectos.';
       document.getElementById('loginPass').value = '';
       document.getElementById('loginPass').focus();
       btn.disabled = false;
@@ -99,14 +132,20 @@ async function doLogin() {
     }
 
     // Login OK
-    sessionStorage.setItem('stk_auth', State.loginMode);
+    State.currentUser = userInput;
+    State.currentRol  = userRecord.rol;
+    State.loginMode   = userRecord.rol; // compat con código viejo
+    sessionStorage.setItem('stk_auth', JSON.stringify({ user: userInput, rol: userRecord.rol }));
+
     document.getElementById('loginOverlay').style.display = 'none';
 
-    if (State.loginMode === 'admin') {
+    const ui = (ROLES[userRecord.rol] || {}).ui || 'operador';
+    if (ui === 'admin') {
       document.getElementById('admin-ui').style.display = 'block';
       await cargarDesdeFirestore();
       if (window.Admin) {
         Admin.normalizarFechasLotes();
+        if (Admin.aplicarPermisosUI) Admin.aplicarPermisosUI();
         Admin.renderDashboard();
         Admin.renderSelectMarca();
         Admin.renderSelectProv();
@@ -133,9 +172,10 @@ function cerrarSesion() {
   document.getElementById('loginOverlay').style.display = 'flex';
   document.getElementById('admin-ui').style.display = 'none';
   document.getElementById('modo-operador').classList.remove('active');
+  var u = document.getElementById('loginUser'); if (u) u.value = '';
   document.getElementById('loginPass').value = '';
-  State.loginMode = 'admin';
-  selectLoginMode('admin');
+  State.currentUser = null;
+  State.currentRol  = null;
 }
 
 // ── CARGA DE DATOS (suscripción realtime a Firestore) ───────────────
@@ -159,14 +199,14 @@ async function cargarDesdeFirestore() {
 
         if (window.Admin) Admin.normalizarFechasLotes();
 
-        const auth = sessionStorage.getItem('stk_auth');
-        if (auth === 'admin' && window.Admin) {
+        const rol = State.currentRol || 'admin';
+        if ((rol === 'admin' || rol === 'encargado') && window.Admin) {
           Admin.renderStats();
           const sec = document.querySelector('.section.active');
           if (sec && sec.id === 'sec-dashboard') Admin.renderDashboard();
           Admin.renderAlertas();
           if (el) { el.textContent = '✓ Sincronizado'; el.style.color = 'var(--green)'; setTimeout(() => el.textContent = '', 2000); }
-        } else if (auth === 'operador' && window.Operador) {
+        } else if (rol === 'operador' && window.Operador) {
           Operador.renderHistory();
           if (Operador.getProd()) {
             const p = State.productos.find(x => x.id === Operador.getProd().id);
@@ -212,13 +252,30 @@ async function guardarEnFirestore() {
 
 // ── INIT ────────────────────────────────────────────────────────────
 window.addEventListener('load', () => {
-  const auth = sessionStorage.getItem('stk_auth');
-  if (auth === 'admin') {
+  const authRaw = sessionStorage.getItem('stk_auth');
+  let auth = null;
+  // Soportar formato viejo (string 'admin' / 'operador') y nuevo (JSON)
+  if (authRaw) {
+    if (authRaw.charAt(0) === '{') {
+      try { auth = JSON.parse(authRaw); } catch(e) { auth = null; }
+    } else {
+      auth = { user: authRaw, rol: authRaw === 'admin' ? 'admin' : 'operador' };
+    }
+  }
+  if (auth) {
+    State.currentUser = auth.user;
+    State.currentRol  = auth.rol;
+    State.loginMode   = auth.rol;
+  }
+  const ui = auth ? ((ROLES[auth.rol] || {}).ui || 'operador') : null;
+
+  if (ui === 'admin') {
     document.getElementById('loginOverlay').style.display = 'none';
     document.getElementById('admin-ui').style.display = 'block';
     cargarDesdeFirestore().then(() => {
       if (window.Admin) {
         Admin.normalizarFechasLotes();
+        if (Admin.aplicarPermisosUI) Admin.aplicarPermisosUI();
         Admin.renderDashboard();
         Admin.renderSelectMarca();
         Admin.renderSelectProv();
@@ -226,7 +283,7 @@ window.addEventListener('load', () => {
         Admin.checkBackupSemanal();
       }
     });
-  } else if (auth === 'operador') {
+  } else if (ui === 'operador') {
     document.getElementById('loginOverlay').style.display = 'none';
     document.getElementById('modo-operador').classList.add('active');
     cargarDesdeFirestore().then(() => { if (window.Operador) Operador.renderHistory(); });
@@ -239,15 +296,21 @@ window.addEventListener('load', () => {
 history.pushState({ page: 'app' }, '', window.location.href);
 window.addEventListener('popstate', function() {
   history.pushState({ page: 'app' }, '', window.location.href);
-  const auth = sessionStorage.getItem('stk_auth');
-  if (auth === 'operador' && window.Operador) {
+  const authRaw = sessionStorage.getItem('stk_auth');
+  let rolGuardado = null;
+  if (authRaw) {
+    try {
+      rolGuardado = authRaw.charAt(0) === '{' ? JSON.parse(authRaw).rol : authRaw;
+    } catch(e) {}
+  }
+  if (rolGuardado === 'operador' && window.Operador) {
     const prod = document.getElementById('op-state-producto');
     const cam  = document.getElementById('op-state-camara');
     const foto = document.getElementById('op-state-foto');
     if (prod && prod.classList.contains('active')) Operador.nuevoEscaneo();
     else if (cam && cam.classList.contains('active')) Operador.cerrarCamara();
     else if (foto && foto.classList.contains('active')) Operador.cerrarFotoIA();
-  } else if (auth === 'admin' && window.Admin) {
+  } else if ((rolGuardado === 'admin' || rolGuardado === 'encargado') && window.Admin) {
     Admin.closeSidebar();
   }
 });
@@ -261,8 +324,12 @@ if ('serviceWorker' in navigator) {
 window.App = {
   doLogin, selectLoginMode, cerrarSesion,
   cargarDesdeFirestore, guardarEnFirestore,
-  DEFAULT_PASSWORDS
+  DEFAULT_PASSWORDS, DEFAULT_USERS, ROLES
 };
+
+// Exponer ROLES y DEFAULT_USERS como globales (los usa admin.js)
+window.ROLES = ROLES;
+window.DEFAULT_USERS = DEFAULT_USERS;
 
 // Atajos globales que usan el HTML directamente
 window.doLogin = doLogin;
