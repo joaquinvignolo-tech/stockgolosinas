@@ -243,13 +243,15 @@ function confirmar() {
     const descontados = retirarFIFO(p, opQty);
     const vtosDescontados = descontados.filter(d => d.vto).map(d => `${d.cant}@${fmtFecha(d.vto)}`).join(', ');
     const hoy = todayStr().split('-'); const loteOp = 'Retiro operador ' + hoy[2] + '/' + hoy[1];
-    State.movimientos.unshift({ prodId: p.id, nombre: p.nombre, tipo: 'salida', cant: opQty, motivo: nota || loteOp, fecha: todayStr(), ts: Date.now(), lote: loteOp, lotesDescontados: vtosDescontados });
+    var movRetiro = { prodId: p.id, nombre: p.nombre, tipo: 'salida', cant: opQty, motivo: nota || loteOp, fecha: todayStr(), ts: Date.now(), lote: loteOp, lotesDescontados: vtosDescontados, usuario: State.currentUser || 'deposito', rol: State.currentRol || 'operador' };
+    State.movimientos.unshift(movRetiro);
     opToast('-' + opQty + ' · ' + p.nombre + (vtosDescontados ? ' (FIFO: ' + vtosDescontados + ')' : ''), 'success');
   } else {
     const vto = document.getElementById('op-vto-input').value || null;
     agregarLote(p, opQty, vto);
     const hoyR = todayStr().split('-'); const loteOpRec = 'Recepción operador ' + hoyR[2] + '/' + hoyR[1];
-    State.movimientos.unshift({ prodId: p.id, nombre: p.nombre, tipo: 'entrada', cant: opQty, motivo: (nota || loteOpRec) + (vto ? ' (vto ' + fmtFecha(vto) + ')' : ''), fecha: todayStr(), ts: Date.now(), lote: loteOpRec });
+    var movRecep = { prodId: p.id, nombre: p.nombre, tipo: 'entrada', cant: opQty, motivo: (nota || loteOpRec) + (vto ? ' (vto ' + fmtFecha(vto) + ')' : ''), fecha: todayStr(), ts: Date.now(), lote: loteOpRec, usuario: State.currentUser || 'deposito', rol: State.currentRol || 'operador' };
+    State.movimientos.unshift(movRecep);
     opToast('+' + opQty + ' · ' + p.nombre + (vto ? ' (vto ' + fmtFecha(vto) + ')' : ''), 'info');
   }
   App.guardarEnFirestore();
