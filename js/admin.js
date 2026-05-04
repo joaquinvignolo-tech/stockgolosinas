@@ -69,6 +69,49 @@ var notify = Utils.notify;
 
 function getMarca(id) { return State.marcas.find(m => m.id === id) || null; }
 
+// ── HELPERS DE ROL Y MOVIMIENTOS ─────────────────────────────────────
+function capitalizar(s) { if (!s) return ''; return s.charAt(0).toUpperCase() + s.slice(1); }
+
+// Registra un movimiento incluyendo el usuario actual
+function addMov(mov) {
+  mov.usuario = State.currentUser || 'desconocido';
+  mov.rol = State.currentRol || 'admin';
+  if (!mov.ts) mov.ts = Date.now();
+  if (!mov.fecha) mov.fecha = todayStr();
+  addMov(mov);
+}
+
+// Oculta/muestra elementos de UI según el rol del usuario logueado
+function aplicarPermisosUI() {
+  var rol = State.currentRol || 'admin';
+  var puedeBorrar = (window.ROLES || {})[rol] ? window.ROLES[rol].puedeBorrar : (rol === 'admin');
+  var veConfig = (window.ROLES || {})[rol] ? window.ROLES[rol].veConfig : (rol === 'admin');
+
+  // Sección Configuración: solo admin la ve en el sidebar
+  var navConfig = document.querySelector('.nav-item[onclick*="configuracion"]');
+  if (navConfig) navConfig.style.display = veConfig ? '' : 'none';
+
+  // Mostrar nombre del usuario en el header
+  var sync = document.getElementById('sync-status');
+  if (sync) {
+    var prevText = sync.dataset.userName;
+    sync.dataset.userName = capitalizar(State.currentUser || '') + ' (' + capitalizar(rol) + ')';
+  }
+  var userBadge = document.getElementById('header-user-badge');
+  if (!userBadge) {
+    userBadge = document.createElement('span');
+    userBadge.id = 'header-user-badge';
+    userBadge.style.cssText = 'font-size:11px;color:var(--accent);font-weight:700;padding:4px 10px;background:var(--accent-light);border-radius:10px;text-transform:uppercase;letter-spacing:.4px;margin-right:8px';
+    var headerBtns = document.querySelector('.header-btns');
+    if (headerBtns) headerBtns.insertBefore(userBadge, headerBtns.firstChild);
+  }
+  userBadge.textContent = '👤 ' + capitalizar(State.currentUser || '');
+  userBadge.title = 'Rol: ' + capitalizar(rol);
+
+  // Re-renderizar la tabla de productos con/sin botón borrar
+  // (la tabla se actualiza naturalmente en el próximo render)
+}
+
 // ── DASHBOARD ───────────────────────────────────────────────────────
 function renderStats() {
   const total = State.productos.length;
@@ -175,12 +218,16 @@ function renderDashboard() {
       const icono = g.movTipo === 'entrada' ? '📥' : '📤';
       const color = g.movTipo === 'entrada' ? 'var(--green)' : 'var(--danger)';
       const signo = g.movTipo === 'entrada' ? '+' : '-';
+      // El usuario es el de cualquiera de los items del lote (suelen ser el mismo)
+      const usrLote = (g.items[0] && g.items[0].usuario) ? capitalizar(g.items[0].usuario) : '';
+      const userBadge = usrLote ? ` · 👤 ${usrLote}` : '';
       const itemsHtml = g.items.map(it => `<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border);font-size:12px"><span style="color:var(--text2)">${it.nombre}</span><span style="font-weight:700;color:${color}">${signo}${it.cant}</span></div>`).join('');
-      return `<div style="border-bottom:1px solid var(--border)"><div onclick="const det=this.nextElementSibling;const abre=det.style.display==='none';det.style.display=abre?'block':'none';this.querySelector('.arr').textContent=abre?'▼':'▶';if(abre)setTimeout(()=>det.scrollIntoView({behavior:'smooth',block:'nearest'}),50)" style="display:flex;align-items:center;gap:10px;padding:10px 0;cursor:pointer;user-select:none"><span style="font-size:18px">${icono}</span><div style="flex:1"><div style="font-size:13px;font-weight:700">${g.lote}</div><div style="font-size:11px;color:var(--text3)">${g.items.length} productos · ${signo}${g.totalUds} uds · ${g.fecha}</div></div><span class="arr" style="color:var(--text3);font-size:12px">▶</span></div><div style="display:none;padding:0 0 10px 28px">${itemsHtml}</div></div>`;
+      return `<div style="border-bottom:1px solid var(--border)"><div onclick="const det=this.nextElementSibling;const abre=det.style.display==='none';det.style.display=abre?'block':'none';this.querySelector('.arr').textContent=abre?'▼':'▶';if(abre)setTimeout(()=>det.scrollIntoView({behavior:'smooth',block:'nearest'}),50)" style="display:flex;align-items:center;gap:10px;padding:10px 0;cursor:pointer;user-select:none"><span style="font-size:18px">${icono}</span><div style="flex:1"><div style="font-size:13px;font-weight:700">${g.lote}</div><div style="font-size:11px;color:var(--text3)">${g.items.length} productos · ${signo}${g.totalUds} uds · ${g.fecha}${userBadge}</div></div><span class="arr" style="color:var(--text3);font-size:12px">▶</span></div><div style="display:none;padding:0 0 10px 28px">${itemsHtml}</div></div>`;
     } else {
       const color = g.tipo === 'entrada' ? 'mov-entrada' : 'mov-salida';
       const signo = g.tipo === 'entrada' ? '+' + g.cant : '-' + g.cant;
-      return `<div class="mov-row"><span class="mov-type ${color}">${signo}</span><div style="flex:1"><div style="font-size:13px">${g.nombre}</div><div style="font-size:11px;color:var(--text3)">${g.motivo || ''} ${g.fecha}</div></div></div>`;
+      const userBadge = g.usuario ? ` · 👤 ${capitalizar(g.usuario)}` : '';
+      return `<div class="mov-row"><span class="mov-type ${color}">${signo}</span><div style="flex:1"><div style="font-size:13px">${g.nombre}</div><div style="font-size:11px;color:var(--text3)">${g.motivo || ''} ${g.fecha}${userBadge}</div></div></div>`;
     }
   }).join('') : '<div style="font-size:13px;color:var(--text3);padding:8px 0">Sin movimientos aún.</div>';
 
@@ -275,7 +322,7 @@ function agregarLoteAlForm() {
   if (cant <= 0) { notify('Ingresá una cantidad válida.'); return; }
   const p = State.productos.find(x => x.id === State.editingId); if (!p) return;
   agregarLote(p, cant, vto);
-  State.movimientos.unshift({ prodId: p.id, nombre: p.nombre, tipo: 'entrada', cant, motivo: 'Nuevo lote' + (vto ? ' (vto ' + fmtFecha(vto) + ')' : ''), fecha: todayStr(), ts: Date.now() });
+  addMov({ prodId: p.id, nombre: p.nombre, tipo: 'entrada', cant, motivo: 'Nuevo lote' + (vto ? ' (vto ' + fmtFecha(vto) + ')' : ''), fecha: todayStr(), ts: Date.now() });
   document.getElementById('lote-cant').value = '';
   document.getElementById('lote-vto').value = '';
   renderLotesForm(p);
@@ -338,7 +385,7 @@ function guardarProducto() {
     const nuevo = { id: State.nextProdId++, ...data, stock: 0, lotes: [] };
     if (stockInicial > 0) {
       agregarLote(nuevo, stockInicial, vtoInicial);
-      State.movimientos.unshift({ prodId: nuevo.id, nombre: nuevo.nombre, tipo: 'entrada', cant: stockInicial, motivo: 'Stock inicial', fecha: todayStr(), ts: Date.now() });
+      addMov({ prodId: nuevo.id, nombre: nuevo.nombre, tipo: 'entrada', cant: stockInicial, motivo: 'Stock inicial', fecha: todayStr(), ts: Date.now() });
     }
     State.productos.push(nuevo);
     State.editingId = nuevo.id;
@@ -353,6 +400,9 @@ function guardarProducto() {
 }
 
 function eliminarProducto(id) {
+  var rol = State.currentRol || 'admin';
+  var puedeBorrar = (window.ROLES || {})[rol] ? window.ROLES[rol].puedeBorrar : (rol === 'admin');
+  if (!puedeBorrar) { notify('No tenés permiso para eliminar productos.'); return; }
   if (!confirm('¿Eliminar producto?')) return;
   State.productos = State.productos.filter(p => p.id !== id);
   renderTabla(); renderStats();
@@ -383,6 +433,8 @@ function renderTabla() {
   });
   const tb = document.getElementById('tabla-productos');
   if (!lista.length) { tb.innerHTML = '<tr><td colspan="13" style="text-align:center;color:var(--text3);padding:20px">Sin resultados.</td></tr>'; return; }
+  const rol = State.currentRol || 'admin';
+  const puedeBorrar = (window.ROLES || {})[rol] ? window.ROLES[rol].puedeBorrar : (rol === 'admin');
   tb.innerHTML = lista.map(p => {
     const e = estadoProd(p), m = getMarca(p.marcaId);
     const ev = estadoVencimiento(p);
@@ -400,7 +452,7 @@ function renderTabla() {
       <td class="col-hide-mob">${p.venta ? fmt$(p.venta) : '—'}</td>
       <td class="col-hide-mob" ${margenCls(p.costo, p.venta)}>${margen(p.costo, p.venta)}</td>
       <td><span class="badge ${e.cls}">${e.label}</span></td>
-      <td><div class="btn-row"><button class="btn btn-sm" onclick="Admin.editarProducto(${p.id})">Editar</button><button class="btn btn-sm btn-danger" onclick="Admin.eliminarProducto(${p.id})">✕</button></div></td>
+      <td><div class="btn-row"><button class="btn btn-sm" onclick="Admin.editarProducto(${p.id})">Editar</button>${puedeBorrar ? `<button class="btn btn-sm btn-danger" onclick="Admin.eliminarProducto(${p.id})">✕</button>` : ''}</div></td>
     </tr>`;
   }).join('');
 }
@@ -541,7 +593,7 @@ function darDeBajaLote(prodId, loteId) {
   const cant = lote.cant;
   p.lotes = p.lotes.filter(l => l.id !== loteId);
   p.stock = stockTotal(p);
-  State.movimientos.unshift({ prodId: p.id, nombre: p.nombre, tipo: 'salida', cant, motivo: 'Baja por vencimiento (' + fmtFecha(lote.vto) + ')', fecha: todayStr(), ts: Date.now() });
+  addMov({ prodId: p.id, nombre: p.nombre, tipo: 'salida', cant, motivo: 'Baja por vencimiento (' + fmtFecha(lote.vto) + ')', fecha: todayStr(), ts: Date.now() });
   renderVencimientos();
   renderStats();
   App.guardarEnFirestore();
@@ -640,7 +692,7 @@ function retConfirmar() {
     const p = State.productos.find(x => x.id === it.id);
     if (p) {
       retirarFIFO(p, it.cant); // descuenta del lote más próximo a vencer
-      State.movimientos.unshift({ id: Date.now() + Math.random(), prodId: it.id, nombre: it.nombre, tipo: 'salida', cant: it.cant, motivo: nombre + (nota ? ' — ' + nota : ''), fecha: todayStr(), lote: nombre });
+      addMov({ id: Date.now() + Math.random(), prodId: it.id, nombre: it.nombre, tipo: 'salida', cant: it.cant, motivo: nombre + (nota ? ' — ' + nota : ''), fecha: todayStr(), lote: nombre });
     }
   });
   notify('Retiro confirmado: ' + retCart.length + ' productos.');
@@ -701,7 +753,7 @@ function recConfirmar() {
     const p = State.productos.find(x => x.id === it.id);
     if (p) {
       agregarLote(p, it.cant, it.vto);
-      State.movimientos.unshift({ id: Date.now() + Math.random(), prodId: it.id, nombre: it.nombre, tipo: 'entrada', cant: it.cant, motivo: nombre + (it.vto ? ' (vto ' + fmtFecha(it.vto) + ')' : ''), fecha: todayStr(), lote: nombre });
+      addMov({ id: Date.now() + Math.random(), prodId: it.id, nombre: it.nombre, tipo: 'entrada', cant: it.cant, motivo: nombre + (it.vto ? ' (vto ' + fmtFecha(it.vto) + ')' : ''), fecha: todayStr(), lote: nombre });
     }
   });
   notify('Recepción confirmada.');
@@ -756,27 +808,52 @@ function renderConfig() {
     ? `Último backup: <b>${new Date(parseInt(ultBackup)).toLocaleString('es-AR')}</b>`
     : 'Sin backups previos.';
 
+  // Lista de usuarios actuales (lo que está en Firebase)
+  const usersListHtml = Object.keys(State.authUsers || {}).map(u => {
+    const rec = State.authUsers[u];
+    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px">
+      <div><b>${capitalizar(u)}</b> <span style="font-size:11px;color:var(--text3);margin-left:6px">${capitalizar(rec.rol)}</span></div>
+      <span class="badge badge-cat">${rec.rol}</span>
+    </div>`;
+  }).join('');
+
   document.getElementById('sec-configuracion').innerHTML = `
+    <div class="card">
+      <div class="card-title" style="margin-bottom:14px">Usuarios del sistema</div>
+      <div style="margin-bottom:8px">${usersListHtml || '<div style="font-size:13px;color:var(--text3)">No hay usuarios cargados.</div>'}</div>
+      <div style="font-size:11px;color:var(--text3)">Para agregar/quitar usuarios hace falta tocar el código (en js/app.js, sección DEFAULT_USERS).</div>
+    </div>
+
     <div class="card">
       <div class="card-title" style="margin-bottom:14px">Cambiar contraseñas</div>
       <div class="form-grid fg2" style="margin-bottom:14px">
         <div class="field">
-          <label>Nueva contraseña Admin</label>
-          <input type="password" id="cfg-pass-admin" placeholder="Dejar vacío para no cambiar">
+          <label>Nueva contraseña Joaquín (admin)</label>
+          <input type="password" id="cfg-pass-joaquin" placeholder="Dejar vacío para no cambiar">
         </div>
         <div class="field">
-          <label>Repetir Admin</label>
-          <input type="password" id="cfg-pass-admin2" placeholder="Repetir nueva">
+          <label>Repetir Joaquín</label>
+          <input type="password" id="cfg-pass-joaquin2" placeholder="Repetir nueva">
         </div>
       </div>
       <div class="form-grid fg2" style="margin-bottom:14px">
         <div class="field">
-          <label>Nueva contraseña Operador</label>
-          <input type="password" id="cfg-pass-op" placeholder="Dejar vacío para no cambiar">
+          <label>Nueva contraseña Natalia (encargada)</label>
+          <input type="password" id="cfg-pass-natalia" placeholder="Dejar vacío para no cambiar">
         </div>
         <div class="field">
-          <label>Repetir Operador</label>
-          <input type="password" id="cfg-pass-op2" placeholder="Repetir nueva">
+          <label>Repetir Natalia</label>
+          <input type="password" id="cfg-pass-natalia2" placeholder="Repetir nueva">
+        </div>
+      </div>
+      <div class="form-grid fg2" style="margin-bottom:14px">
+        <div class="field">
+          <label>Nueva contraseña Depósito (operador)</label>
+          <input type="password" id="cfg-pass-deposito" placeholder="Dejar vacío para no cambiar">
+        </div>
+        <div class="field">
+          <label>Repetir Depósito</label>
+          <input type="password" id="cfg-pass-deposito2" placeholder="Repetir nueva">
         </div>
       </div>
       <button class="btn btn-accent" onclick="Admin.cambiarPasswords()">Guardar contraseñas</button>
@@ -811,44 +888,50 @@ function renderConfig() {
     <div class="card" style="border-color:var(--danger)">
       <div class="card-title" style="margin-bottom:14px;color:var(--danger)">⚠ Zona peligrosa</div>
       <button class="btn btn-danger" onclick="Admin.restablecerPasswords()">Restablecer contraseñas por defecto</button>
-      <div style="font-size:11px;color:var(--text3);margin-top:10px">Si olvidaste tus contraseñas, esto las vuelve a <code>${App.DEFAULT_PASSWORDS.admin}</code> y <code>${App.DEFAULT_PASSWORDS.operador}</code>.</div>
+      <div style="font-size:11px;color:var(--text3);margin-top:10px">Si olvidaste tus contraseñas, esto las vuelve a las originales (joaquin/estaderojo1, natalia/1317, deposito/golosinas).</div>
     </div>
   `;
 }
 
 async function cambiarPasswords() {
-  const pa = document.getElementById('cfg-pass-admin').value;
-  const pa2 = document.getElementById('cfg-pass-admin2').value;
-  const po = document.getElementById('cfg-pass-op').value;
-  const po2 = document.getElementById('cfg-pass-op2').value;
+  const pares = [
+    { user: 'joaquin', a: 'cfg-pass-joaquin', b: 'cfg-pass-joaquin2', label: 'Joaquín' },
+    { user: 'natalia', a: 'cfg-pass-natalia', b: 'cfg-pass-natalia2', label: 'Natalia' },
+    { user: 'deposito', a: 'cfg-pass-deposito', b: 'cfg-pass-deposito2', label: 'Depósito' }
+  ];
 
   const updates = {};
-  if (pa || pa2) {
-    if (pa !== pa2) { notify('Las contraseñas admin no coinciden.'); return; }
-    if (pa.length < 4) { notify('La contraseña admin debe tener al menos 4 caracteres.'); return; }
-    updates.admin = await sha256(pa);
-  }
-  if (po || po2) {
-    if (po !== po2) { notify('Las contraseñas operador no coinciden.'); return; }
-    if (po.length < 4) { notify('La contraseña operador debe tener al menos 4 caracteres.'); return; }
-    updates.operador = await sha256(po);
+  for (const p of pares) {
+    const v1 = document.getElementById(p.a).value;
+    const v2 = document.getElementById(p.b).value;
+    if (!v1 && !v2) continue;
+    if (v1 !== v2) { notify(`Las contraseñas de ${p.label} no coinciden.`); return; }
+    if (v1.length < 4) { notify(`La contraseña de ${p.label} debe tener al menos 4 caracteres.`); return; }
+    updates[p.user] = await sha256(v1);
   }
 
   if (!Object.keys(updates).length) { notify('No cambiaste ninguna contraseña.'); return; }
 
-  const currentAuth = { ...State.authHashes, ...updates };
-  await window._fb.setConfig({ auth: currentAuth });
-  State.authHashes = currentAuth;
+  // Actualizar State.authUsers con los nuevos hashes
+  const newUsers = { ...State.authUsers };
+  for (const u in updates) {
+    if (newUsers[u]) newUsers[u] = { ...newUsers[u], hash: updates[u] };
+  }
+  await window._fb.setConfig({ users: newUsers });
+  State.authUsers = newUsers;
   notify('✓ Contraseñas actualizadas.');
-  ['cfg-pass-admin', 'cfg-pass-admin2', 'cfg-pass-op', 'cfg-pass-op2'].forEach(id => document.getElementById(id).value = '');
+  pares.forEach(p => { document.getElementById(p.a).value = ''; document.getElementById(p.b).value = ''; });
 }
 
 async function restablecerPasswords() {
   if (!confirm('¿Restablecer contraseñas por defecto? ESTO CUALQUIERA QUE SEPA LAS CONTRASEÑAS ORIGINALES VA A PODER ENTRAR.')) return;
-  const hashAdmin = await sha256(App.DEFAULT_PASSWORDS.admin);
-  const hashOp    = await sha256(App.DEFAULT_PASSWORDS.operador);
-  await window._fb.setConfig({ auth: { admin: hashAdmin, operador: hashOp } });
-  State.authHashes = { admin: hashAdmin, operador: hashOp };
+  const newUsers = {};
+  for (const u in window.DEFAULT_USERS) {
+    const def = window.DEFAULT_USERS[u];
+    newUsers[u] = { rol: def.rol, hash: await sha256(def.pass) };
+  }
+  await window._fb.setConfig({ users: newUsers });
+  State.authUsers = newUsers;
   notify('✓ Contraseñas restablecidas.');
 }
 
@@ -1049,7 +1132,8 @@ window.Admin = {
   renderRanking, rkScroll,
   renderConfig, cambiarPasswords, restablecerPasswords,
   checkBackupSemanal, hacerBackupManual, exportarExcel, importarDesdeExcel,
-  migrarLotes, normalizarFechasLotes
+  migrarLotes, normalizarFechasLotes,
+  aplicarPermisosUI, addMov
 };
 // Atajos para onclick en HTML
 Object.assign(window, Admin);
