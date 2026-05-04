@@ -21,17 +21,10 @@
     <div class="login-logo">🍬 STOCK<span>GOLOSINAS</span></div>
     <div class="login-sub">Inventario del kiosco</div>
 
-    <div class="login-modes">
-      <button class="login-mode-btn selected" id="mode-admin-btn" onclick="selectLoginMode('admin')">
-        <span class="mode-icon">⚙️</span>ADMIN
-      </button>
-      <button class="login-mode-btn" id="mode-op-btn" onclick="selectLoginMode('operador')">
-        <span class="mode-icon">📱</span>OPERADOR
-      </button>
-    </div>
-
+    <input type="text" class="login-field" id="loginUser" placeholder="Usuario"
+           autocomplete="username" autocapitalize="none" autocorrect="off" spellcheck="false">
     <input type="password" class="login-field" id="loginPass" placeholder="Contraseña"
-           onkeydown="if(event.key==='Enter') doLogin()" autocomplete="off">
+           onkeydown="if(event.key==='Enter') doLogin()" autocomplete="current-password">
     <button class="login-btn" onclick="doLogin()">Ingresar</button>
     <div class="login-error" id="loginError"></div>
   </div>
